@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>智能体聊天框（Coze + HiAgent）</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css">
+  <style>
+    /* 全局样式：简约清新基础 */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #fafafa; }
+    /* 顶部切换按钮区：初始显示 */
+    .header { 
+      text-align: center; padding: 20px 0; background-color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
+      margin-bottom: 10px; /* 底部间距，避免与聊天框紧贴 */
+    }
+    .header img { width: 200px; height: auto; margin-bottom: 15px; }
+    .agent-switch { margin: 10px 0; }
+    .agent-btn { 
+      padding: 8px 20px; margin: 0 10px; 
+      border: none; border-radius: 20px; cursor: pointer;
+      background: #f0f2f5; color: #333; font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    .agent-btn.active { background: #007bff; color: #fff; }
+    .agent-btn:hover:not(.active) { background: #e5e7eb; }
+    /* Coze 容器：初始隐藏，点击切换后显示 */
+    .chat-container { 
+      width: 90%; max-width: 600px; margin: 20px auto; 
+      border: 1px solid #e5e7eb; border-radius: 12px;
+      display: none; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      }
+    /* -------------------------- HiAgent 全屏样式（初始隐藏） -------------------------- */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background-color: #fff; 
+      z-index: 1000; display: none; /* 关键修改：初始隐藏，避免自动弹出 */
+      align-items: center; justify-content: center;
+      padding: 0; margin: 0;
+    }
+    .modal-container {
+      width: 100vw; height: 100vh; /* 占满屏幕 */
+      max-width: none; max-height: none;
+      background-color: #fff; border-radius: 0;
+      box-shadow: none;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    /* 1. 顶部区域 */
+    .modal-header {
+      padding: 16px 24px; background: #fff;
+      border-bottom: 1px solid #f0f2f5;
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%;
+    }
+    .agent-info { display: flex; align-items: center; gap: 12px; }
+    .agent-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      background-image: url('https://i0.hdslb.com/bfs/new_dyn/ea68e5b0127cc7043d2040729169a0ba512905274.png@1052w_!web-dynamic.avif');
+      background-size: cover; background-position: center; background-repeat: no-repeat;
+    }
+    .agent-name { font-size: 18px; font-weight: 600; color: #333; }
+    .header-icons { display: flex; align-items: center; gap: 16px; }
+    .header-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px; display: flex;
+      align-items: center; justify-content: center;
+      color: #666; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .header-icon:hover { background-color: #f0f2f5; color: #007bff; }
+    .close-icon { color: #dc3545; }
+    .close-icon:hover { background-color: #f8d7da; color: #dc3545; }
+    /* 2. 中间消息区 */
+    .modal-body {
+      flex: 1; padding: 20px; overflow-y: auto;
+      background-color: #fafafa;
+      width: 100%;
+    }
+    .chat-messages {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    /* 消息气泡样式 */
+    .message {
+      padding: 12px 16px;
+      border-radius: 10px; max-width: 80%;
+      font-size: 14px; line-height: 1.5;
+      word-wrap: break-word;
+    }
+    .message.user {
+      background-color: #007bff; color: #fff;
+      margin-left: auto; border-bottom-right-radius: 4px;
+    }
+    .message.ai {
+      background-color: #fff; color: #333;
+      margin-right: auto; border: 1px solid #e5e7eb;
+      border-bottom-left-radius: 4px;
+    }
+    .message.ai.loading { color: #999; font-style: italic; }
+    /* 3. 底部输入区 */
+    .modal-footer {
+      padding: 16px 24px; background: #fff;
+      border-top: 1px solid #f0f2f5;
+      display: flex; align-items: center; gap: 12px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .chat-input {
+      flex: 1; padding: 12px 16px;
+      border: 1px solid #e5e7eb; border-radius: 12px;
+      font-size: 14px; color: #333;
+      outline: none; transition: all 0.2s ease;
+    }
+    .chat-input::placeholder { color: #999; }
+    .chat-input:focus {
+      border-color: #007bff; box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+    }
+    .send-btn {
+      padding: 12px 24px; background-color: #007bff;
+      border: none; border-radius: 12px;
+      font-size: 14px; font-weight: 500; color: #fff;
+      cursor: pointer; transition: all 0.2s ease;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .send-btn:hover {
+      background-color: #0056b3; box-shadow: 0 2px 4px rgba(0, 86, 179, 0.2);
+    }
+    /* 错误提示 */
+    .error {
+      position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px; background-color: #f8d7da;
+      border-radius: 8px; color: #dc3545;
+      font-size: 13px; z-index: 1001;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- 顶部切换按钮区 -->
+  <div class="header">
+    <img src='https://i0.hdslb.com/bfs/new_dyn/f37965c82699338fdf76ec6f79f5136d512905274.png@1052w_!web-dynamic.avif' 
+         alt='sufe' width="200" height="auto">
+    <div class="agent-switch">
+      <button class="agent-btn" id="cozeBtn">经管数模智能体</button>
+      <button class="agent-btn" id="hiAgentBtn">匡时财经教育大模型</button>
+    </div>
+  </div>
+  <!-- Coze 容器 -->
+  <div class="chat-container" id="cozeChatContainer">
+    <div id="cozeChatWrapper"></div>
+  </div>
+  <!-- -------------------------- HiAgent 全屏容器（初始隐藏） -------------------------- -->
+  <div class="modal-overlay" id="hiAgentModalOverlay">
+    <div class="modal-container" id="hiAgentModalContainer">
+      <!-- 1. 顶部区域 -->
+      <div class="modal-header">
+        <div class="agent-info">
+          <div class="agent-icon">
+            <!-- 头像通过CSS背景图显示 -->
+          </div>
+          <div class="agent-name">匡时财经教育大模型</div>
+        </div>
+        <div class="header-icons">
+          <div class="header-icon close-icon" id="closeModalBtn" title="关闭">
+            <i class="fa fa-times" aria-hidden="true"></i>
+          </div>
+        </div>
+      </div>
+      <!-- 2. 中间消息区 -->
+      <div class="modal-body">
+        <div class="chat-messages" id="hiAgentMessages">
+          <!-- 会话创建后自动渲染欢迎语 -->
+        </div>
+      </div>
+      <!-- 3. 底部输入区 -->
+      <div class="modal-footer">
+        <input type="text" class="chat-input" id="hiAgentInput" placeholder="输入问题,可通过 shift +enter 换行">
+        <button class="send-btn" id="hiAgentSendBtn">
+          <i class="fa fa-paper-plane" aria-hidden="true"></i> 发送
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- 错误提示 -->
+  <div class="error" id="hiAgentError"></div>
+
+  <script>
+    // -------------------------- 全局配置与状态 --------------------------
+    const HI_AGENT_CONFIG = {
+      API_KEY: 'd2jv96jretffqccj8pg0',
+      API_URL: 'https://aibot.sufe.edu.cn:8443/api/proxy/api/v1',
+      APP_ID: 'd2ju91mg9chir1bd0t80',
+      USER_ID: 'test_user_001'
+    };
+    const COZE_CONFIG = {
+      BOT_ID: '7557653962485235722',
+      TOKEN: 'pat_2FqmHzBX0n7aYohGcKlxF3Aauf11FR151v7mV9PRc4SFFBhSSmSOxGTS6av7jCOE'
+    };
+    let hiAgentConvId = null; // HiAgent 会话ID
+    let isSending = false;    // 防止重复发送
+    const hiAgentMessages = document.getElementById('hiAgentMessages'); // 消息容器
+    const hiAgentInput = document.getElementById('hiAgentInput'); // 输入框
+    const WELCOME_MSG = '嗨，你好！我随时准备为你答疑解惑。'; // 智能体欢迎语
+    // -------------------------- DOM元素缓存 --------------------------
+    const cozeBtn = document.getElementById('cozeBtn');
+    const hiAgentBtn = document.getElementById('hiAgentBtn');
+    const cozeChatContainer = document.getElementById('cozeChatContainer');
+    const cozeChatWrapper = document.getElementById('cozeChatWrapper');
+    const hiAgentModalOverlay = document.getElementById('hiAgentModalOverlay');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const hiAgentSendBtn = document.getElementById('hiAgentSendBtn');
+    const hiAgentError = document.getElementById('hiAgentError');
+    // -------------------------- 核心工具函数 --------------------------
+    /** 显示错误提示 */
+    function showError(message) {
+      hiAgentError.textContent = `HiAgent连接错误：${message}`;
+      hiAgentError.style.display = 'block';
+      setTimeout(() => hiAgentError.style.display = 'none', 5000);
+    }
+    /** 创建HiAgent会话 + 自动发送欢迎语 */
+    async function createHiAgentConversationAndSendWelcome() {
+      try {
+        // 1. 创建会话
+        const response = await fetch(`${HI_AGENT_CONFIG.API_URL}/create_conversation`, {
+          method: 'POST',
+          headers: {
+            'Apikey': HI_AGENT_CONFIG.API_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ UserID: HI_AGENT_CONFIG.USER_ID })
+        });
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`${response.status}(${response.statusText})：${errorBody}`);
+        }
+        const result = await response.json();
+        hiAgentConvId = result?.Conversation?.AppConversationID;
+        if (!hiAgentConvId) throw new Error('未返回会话ID，请检查API配置');
+        // 2. 会话创建成功后，自动发送欢迎语
+        await sendWelcomeMessage();
+        return hiAgentConvId;
+      } catch (error) {
+        showError(`会话创建/欢迎语发送失败：${error.message}`);
+        throw error;
+      }
+    }
+    /** 发送欢迎语到HiAgent */
+    async function sendWelcomeMessage() {
+      try {
+        // 渲染AI欢迎语（先显示“加载中”）
+        const loadingEl = appendMessage('AI正在初始化...', false, true);
+        
+        // 发送欢迎语请求
+        const response = await fetch(`${HI_AGENT_CONFIG.API_URL}/chat_query_v2`, {
+          method: 'POST',
+          headers: {
+            'Apikey': HI_AGENT_CONFIG.API_KEY,
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          body: JSON.stringify({
+            UserID: HI_AGENT_CONFIG.USER_ID,
+            AppConversationID: hiAgentConvId,
+            Query: WELCOME_MSG,
+            ResponseMode: 'streaming'
+          })
+        });
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`${response.status}(${response.statusText})：${errorBody}`);
+        }
+        if (!response.body) throw new Error('API未返回流式响应');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let aiReply = '';
+        hiAgentMessages.removeChild(loadingEl); // 移除加载提示
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const dataMatches = chunk.match(/data:\s*(\{.*?\})\s*\n/g);
+          if (dataMatches) {
+            for (const match of dataMatches) {
+              try {
+                const jsonStr = match.replace(/^data:\s*/, '').trim();
+                const data = JSON.parse(jsonStr);
+                switch (data.event) {
+                  case 'message':
+                    aiReply += data.answer || '';
+                    let aiMsgEl = hiAgentMessages.lastChild;
+                    if (aiMsgEl?.className.includes('ai') && !aiMsgEl?.className.includes('loading')) {
+                      aiMsgEl.textContent = aiReply;
+                    } else {
+                      aiMsgEl = appendMessage(aiReply, false);
+                    }
+                    break;
+                  case 'message_end':
+                    console.log('欢迎语响应完成：', aiReply);
+                    break;
+                  case 'message_failed':
+                    throw new Error(`欢迎语发送失败：${data.reason || '未知错误'}`);
+                }
+              } catch (parseError) {
+                showError(`欢迎语响应解析失败：${parseError.message}`);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        showError(`欢迎语发送失败：${error.message}`);
+      }
+    }
+    /** 渲染消息到容器 */
+    function appendMessage(content, isUser, isLoading = false) {
+      const messageEl = document.createElement('div');
+      const messageClass = `message ${isUser ? 'user' : 'ai'} ${isLoading ? 'loading' : ''}`;
+      messageEl.className = messageClass;
+      messageEl.textContent = content;
+      hiAgentMessages.appendChild(messageEl);
+      hiAgentMessages.scrollTop = hiAgentMessages.scrollHeight; // 滚动到最新消息
+      return messageEl;
+    }
+    /** 发送用户消息到HiAgent */
+    async function sendUserMessage() {
+      const trimContent = hiAgentInput.value.trim();
+      if (!trimContent || isSending) return;
+      // 发送前清空输入框
+      hiAgentInput.value = ''; 
+      
+      // 标记发送中
+      isSending = true;
+      hiAgentSendBtn.disabled = true;
+      hiAgentSendBtn.style.opacity = '0.7';
+      appendMessage(trimContent, true); // 渲染用户消息
+      const loadingEl = appendMessage('AI正在思考...', false, true); // 渲染加载提示
+      try {
+        if (!hiAgentConvId) throw new Error('会话ID不存在，请检查会话创建逻辑');
+        
+        // 发送流式请求
+        const response = await fetch(`${HI_AGENT_CONFIG.API_URL}/chat_query_v2`, {
+          method: 'POST',
+          headers: {
+            'Apikey': HI_AGENT_CONFIG.API_KEY,
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          body: JSON.stringify({
+            UserID: HI_AGENT_CONFIG.USER_ID,
+            AppConversationID: hiAgentConvId,
+            Query: trimContent,
+            ResponseMode: 'streaming'
+          })
+        });
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(`${response.status}(${response.statusText})：${errorBody}`);
+        }
+        if (!response.body) throw new Error('API未返回流式响应');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let aiReply = '';
+        hiAgentMessages.removeChild(loadingEl); // 移除加载提示
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const dataMatches = chunk.match(/data:\s*(\{.*?\})\s*\n/g);
+          if (dataMatches) {
+            for (const match of dataMatches) {
+              try {
+                const jsonStr = match.replace(/^data:\s*/, '').trim();
+                const data = JSON.parse(jsonStr);
+                switch (data.event) {
+                  case 'message':
+                    aiReply += data.answer || '';
+                    let aiMsgEl = hiAgentMessages.lastChild;
+                    if (aiMsgEl?.className.includes('ai') && !aiMsgEl?.className.includes('loading')) {
+                      aiMsgEl.textContent = aiReply;
+                    } else {
+                      aiMsgEl = appendMessage(aiReply, false);
+                    }
+                    break;
+                  case 'message_end':
+                    console.log('用户消息响应完成：', aiReply);
+                    break;
+                  case 'message_failed':
+                    throw new Error(`AI回复失败：${data.reason || '未知错误'}`);
+                }
+              } catch (parseError) {
+                showError(`响应解析失败：${parseError.message}`);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        if (hiAgentMessages.contains(loadingEl)) {
+          hiAgentMessages.removeChild(loadingEl);
+        }
+        appendMessage(`抱歉，连接HiAgent失败：${error.message}`, false);
+        showError(error.message);
+      } finally {
+        isSending = false;
+        hiAgentSendBtn.disabled = false;
+        hiAgentSendBtn.style.opacity = '1';
+      }
+    }
+    // -------------------------- Coze 加载逻辑 --------------------------
+    function loadAndInitCoze() {
+      const existingCozeChat = document.querySelector('.coze-web-chat');
+      if (existingCozeChat) existingCozeChat.remove();
+      const sdkScript = document.createElement('script');
+      sdkScript.src = 'https://lf-cdn.coze.cn/obj/unpkg/flow-platform/chat-app-sdk/1.0.0-beta.2/libs/cn/index.js';
+      sdkScript.onload = function() {
+        const cozeChat = new CozeWebSDK.WebChatClient({
+          config: {
+            botId: COZE_CONFIG.BOT_ID,
+            isIframe: false,
+            botInfo: { parameters: { user_name: '测试用户' } },
+            autoShow: true, // Coze切换后自动显示聊天框
+          },
+          componentProps: { 
+            layout: 'mobile', 
+            showFloatingButton: false // 隐藏Coze悬浮球
+          },
+          auth: {
+            type: 'token',
+            token: COZE_CONFIG.TOKEN,
+            onRefreshToken: () => '新的访问密钥'
+          }
+        });
+        cozeChat.showChatBot({ container: '#cozeChatWrapper' });
+      };
+      document.body.appendChild(sdkScript);
+    }
+    // -------------------------- 事件绑定（无默认弹出逻辑） --------------------------
+    document.addEventListener('DOMContentLoaded', function() {
+      // 1. 切换到“经管数模智能体（Coze）”
+      cozeBtn.addEventListener('click', function() {
+        // 更新按钮状态
+        cozeBtn.classList.add('active');
+        hiAgentBtn.classList.remove('active');
+        // 显示Coze容器，隐藏HiAgent
+        cozeChatContainer.style.display = 'block';
+        hiAgentModalOverlay.style.display = 'none';
+        // 加载Coze（若未加载过）
+        if (!document.querySelector('.coze-web-chat')) {
+          loadAndInitCoze();
+        }
+      });
+
+      // 2. 切换到“匡时财经教育大模型”
+      hiAgentBtn.addEventListener('click', async function() {
+        // 更新按钮状态
+        hiAgentBtn.classList.add('active');
+        cozeBtn.classList.remove('active');
+        // 隐藏Coze容器，显示HiAgent
+        cozeChatContainer.style.display = 'none';
+        hiAgentModalOverlay.style.display = 'flex';
+        hiAgentInput.focus();
+        // 重置会话状态（每次切换视为新会话）
+        hiAgentConvId = null;
+        hiAgentMessages.innerHTML = '';
+        // 创建新会话 + 发送欢迎语
+        try {
+          await createHiAgentConversationAndSendWelcome();
+        } catch (error) {
+          // 异常不阻断UI
+        }
+      });
+
+      // 3. 关闭HiAgent全屏容器
+      closeModalBtn.addEventListener('click', function() {
+        hiAgentModalOverlay.style.display = 'none';
+      });
+
+      // 4. HiAgent发送按钮点击事件
+      hiAgentSendBtn.addEventListener('click', sendUserMessage);
+
+      // 5. HiAgent输入框回车发送（shift+enter换行）
+      hiAgentInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendUserMessage();
+        }
+      });
+
+      // 关键修改：删除了“hiAgentBtn.click();”，避免网页打开自动触发匡时弹出
+    });
+  </script>
+</body>
+</html>
